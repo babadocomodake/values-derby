@@ -1,0 +1,32 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AIアシスタント向け指示・ローカル専用（公開リポに含めない）
+CLAUDE.md
+.claude/
+.playwright-mcp/
+
+# 実物カードの写真（アプリ動作には不要・サイズ大・市販物。手元には残す）
+docs/cards-raw/

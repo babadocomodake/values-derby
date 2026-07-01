@@ -4,10 +4,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
-// GitHub Pages は https://<user>.github.io/<repo>/ のサブパス配信になるため、
-// 本番ビルドだけ base を '/values-derby/' にする（開発サーバは '/' のまま）。
+// 【公開ルール】本番ビルドの base は相対パス './' に統一する（docs/deploy.md 参照）。
+// 相対にすると、GitHub Pages（/<repo>/ 配下）でも Vercel等（ルート直下）でも、
+// リポ名を書き換えずに同じ設定で動く。※画面ごとにURLを分けるルーティング未使用が前提。
+// 開発サーバ(dev)は '/' のままにしておく。
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/values-derby/' : '/',
+  base: command === 'build' ? './' : '/',
   plugins: [react(), tailwindcss()],
   build: {
     // 本番ビルドにソースマップを出さない（元コードを辿られにくくする）。Vite既定もoffだが意図を明示。

@@ -527,11 +527,14 @@ export default function App() {
     playFanfare(grand);
     const askerName = getAsker(state).name;
     const raceNo = state.roundIndex + 1;
-    const id = setTimeout(
+    // ファンファーレが鳴り終わってから実況（被り防止）。
+    // ★重要：ここで clearTimeout してしまうと、待機中(最大12秒)に
+    //   「回答を決める」で先へ進んだ瞬間に実況がキャンセルされて“消える”。
+    //   画面を進めても実況は流したいので、あえて後片付けでは止めない。
+    setTimeout(
       () => announce(`さぁ、第${raceNo}レース！　出題者は${askerName}さんだ！`, { clear: true }),
       fanfareMs(grand), // 選択中パターンの長さぶん待ってから喋る（被り防止）
     );
-    return () => clearTimeout(id);
   }, [state.phase, state.roundIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // セットアップ完了 → 出題者スロットごとに「その人が未回答のお題」を割り当てて START_GAME。

@@ -1,1 +1,179 @@
 @import "tailwindcss";
+
+/* ===== ドット競馬デザイン（8bit・昼の芝コース）=====
+   ピクセルフォント＋カクカクの太枠＋ハードシャドウ＋芝ストライプで
+   ファミコン風の競馬場に。色は限定パレット＝高コントラスト。 */
+
+:root {
+  --turf: #47b14e; /* 芝の緑 */
+  --turf-2: #3ea045; /* 芝の刈り筋（濃い方） */
+  --ink: #123d17; /* 縁取り・文字の濃緑 */
+  --gold: #ffcf33; /* ゴールド（勝負色） */
+  --gold-d: #d99a00; /* ゴールドの影 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "DotGothic16", "MS Gothic", monospace;
+  background-color: var(--turf);
+  /* ドットの走査線＋芝の刈り筋ストライプ */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, var(--turf) 0 26px, var(--turf-2) 26px 52px);
+  background-attachment: fixed;
+  -webkit-font-smoothing: none;
+}
+
+/* 白カード：カクカクの太枠＋ハードシャドウ */
+.pixel-card {
+  background: #fffdf3;
+  border: 4px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.32);
+}
+
+/* ボタン：押すと沈む（ハードシャドウが消えて translate） */
+.pixel-btn {
+  border: 4px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+  transition:
+    transform 0.05s,
+    box-shadow 0.05s;
+}
+.pixel-btn:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.4);
+}
+
+/* 主要ボタン：勝負のゴールド */
+.pixel-btn-gold {
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 var(--gold-d);
+}
+.pixel-btn-gold:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--gold-d);
+}
+.pixel-btn-gold:disabled {
+  background: #cfcfcf;
+  color: #7a7a7a;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* 電光掲示板（LED風）：暗い盤に光る黄色文字 */
+.led-board {
+  background: #0e1a0e;
+  color: #ffd93b;
+  border: 4px solid #061006;
+  border-radius: 0;
+  text-shadow: 0 0 6px rgba(255, 217, 59, 0.7);
+  box-shadow: inset 0 0 0 2px #1c2e1c;
+}
+.led-board .led-hi {
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+/* タイトル：ゴールドの立体ドット文字 */
+.pixel-title {
+  color: #fffdf3;
+  text-shadow:
+    3px 3px 0 var(--gold-d),
+    5px 5px 0 rgba(0, 0, 0, 0.35);
+}
+
+.image-pixel {
+  image-rendering: pixelated;
+}
+
+/* 入力欄：カクカクの枠（丸みなし） */
+.pixel-input {
+  background: #fffdf3;
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+}
+.pixel-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+/* 小さめボタン（副操作用）：細めの枠＋軽い沈み込み */
+.pixel-btn-sm {
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  transition:
+    transform 0.05s,
+    box-shadow 0.05s;
+}
+.pixel-btn-sm:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.35);
+}
+
+/* 状態チップ（小さなラベル）：枠つきベタ塗り */
+.pixel-chip {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+}
+
+/* 選択タブ（お題の種類など）：選ぶとゴールドに点灯 */
+.pixel-tab {
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: #fffdf3;
+  transition: transform 0.05s;
+}
+.pixel-tab.is-active {
+  background: var(--gold);
+  box-shadow: inset 0 0 0 3px #fffdf3;
+}
+
+/* スライダー：芝色のトラック＋ゴールドのつまみ（角ばり） */
+.pixel-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  background: #0e1a0e;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+}
+.pixel-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--gold);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  cursor: pointer;
+}
+.pixel-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--gold);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+/* 結果発表の“めくり枠”：勝負色のゴールドで統一 */
+.gate-open {
+  background: var(--gold);
+  color: var(--ink);
+}
+.gate-closed {
+  background: #0e1a0e;
+  color: #ffd93b;
+}

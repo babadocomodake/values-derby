@@ -21,6 +21,19 @@ import {
   clearAnswered,
   appendResult,
 } from "./storage";
+import {
+  unlockAudio,
+  playFanfare,
+  announce,
+  isSoundOn,
+  setSoundOn,
+  fanfareMs,
+  FANFARES,
+  getFanfareId,
+  setFanfareId,
+  previewFanfare,
+  type FanfareId,
+} from "./sound";
 
 // 配列をシャッフル（お題の出題順をランダムにする）。Fisher–Yates 法。
 function shuffle<T>(arr: T[]): T[] {
@@ -60,11 +73,9 @@ function OptionButton({
       disabled={disabled && !picked}
       className={[
         // items-start＋gap で、長い選択肢が複数行に折り返しても着順バッジが右上に収まる
-        "flex w-full items-start justify-between gap-2 rounded-xl px-4 py-3 text-left text-base mb-2 border transition",
-        picked
-          ? "border-2 border-emerald-500 bg-emerald-50 text-emerald-900 font-medium"
-          : "border-slate-300 bg-white text-slate-800",
-        disabled && !picked ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-slate-50",
+        "pixel-btn mb-3 flex w-full items-start justify-between gap-2 px-4 py-3 text-left text-base",
+        picked ? "bg-[#ffe89a] font-bold text-[#123d17]" : "bg-[#fffdf3] text-[#123d17]",
+        disabled && !picked ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
       ].join(" ")}
     >
       <span className="flex-1 leading-snug break-words">{opt}</span>
@@ -88,10 +99,8 @@ function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "w-full rounded-xl px-6 py-3 text-base font-medium text-white transition",
-        disabled
-          ? "bg-slate-300 cursor-not-allowed"
-          : "bg-indigo-600 hover:bg-indigo-700 cursor-pointer",
+        "pixel-btn pixel-btn-gold w-full px-6 py-3 text-lg font-bold tracking-wide",
+        disabled ? "cursor-not-allowed" : "cursor-pointer",
       ].join(" ")}
     >
       {children}
@@ -105,19 +114,19 @@ function TurnBar({ state }: { state: GameState }) {
   const asker = getAsker(state);
   const lap = getLap(state);
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
+    <div className="led-board mb-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
       <span>
-        第{lap}周 / 第{state.roundIndex + 1}レース（全{state.totalRounds}）
+        第{lap}周 / 第{state.roundIndex + 1}R（全{state.totalRounds}）
       </span>
-      <span className="text-slate-400">|</span>
+      <span className="opacity-50">|</span>
       <span>
-        出題者: <span className="font-medium text-slate-800">{asker.name}</span>
+        出題者: <span className="led-hi font-bold">{asker.name}</span>
       </span>
       {state.guesserQueue.length > 0 && state.currentGuesserId && (
         <>
-          <span className="text-slate-400">|</span>
+          <span className="opacity-50">|</span>
           <span>
-            予想中: <span className="font-medium text-slate-800">{nameOf(state, state.currentGuesserId)}</span>
+            予想中: <span className="led-hi font-bold">{nameOf(state, state.currentGuesserId)}</span>
             （残り{state.guesserQueue.length}人）
           </span>
         </>
@@ -126,15 +135,85 @@ function TurnBar({ state }: { state: GameState }) {
   );
 }
 
+// 音のON/OFFトグル（全画面の右上に固定表示）。localStorageに保存。
+function SoundToggle() {
+  const [on, setOn] = useState(isSoundOn());
+  return (
+    <button
+      onClick={() => {
+        const next = !on;
+        setSoundOn(next);
+        setOn(next);
+      }}
+      className="pixel-btn fixed right-3 top-3 z-50 bg-[#fffdf3] px-3 py-1.5 text-sm"
+      aria-label={on ? "音を消す" : "音を出す"}
+      title={on ? "音: ON（タップでOFF）" : "音: OFF（タップでON）"}
+    >
+      {on ? "🔊" : "🔇"}
+    </button>
+  );
+}
+
+// ファンファーレ選択（試聴して選ぶ）。選択は localStorage に保存。
+function FanfarePicker() {
+  const [sel, setSel] = useState<FanfareId>(() => getFanfareId());
+  return (
+    <div className="mb-4 pixel-card p-5">
+      <label className="mb-1 block text-sm font-bold text-[#123d17]">ファンファーレ（開始の音）🎺</label>
+      <p className="mb-3 text-xs text-[#4a6b4f]">▶で試聴して、好きなものを選んでください。</p>
+      <div className="flex flex-col gap-2">
+        {FANFARES.map((f) => (
+          <div
+            key={f.id}
+            className={[
+              "pixel-tab flex items-center gap-2 px-3 py-2",
+              sel === f.id ? "is-active" : "",
+            ].join(" ")}
+          >
+            <button
+              onClick={() => {
+                unlockAudio(); // タップで音を解禁
+                previewFanfare(f.id);
+              }}
+              className="pixel-btn pixel-btn-gold flex h-10 w-10 shrink-0 items-center justify-center text-lg"
+              aria-label={`${f.label}を試聴`}
+              title="試聴する"
+            >
+              ▶
+            </button>
+            <button
+              onClick={() => {
+                setFanfareId(f.id);
+                setSel(f.id);
+              }}
+              className="flex-1 text-left"
+            >
+              <div className="text-sm font-bold text-[#123d17]">
+                {f.label} {sel === f.id && <span className="text-[#8a5a00]">✓ 選択中</span>}
+              </div>
+              <div className="mt-0.5 text-[11px] leading-tight text-[#4a6b4f]">{f.desc}</div>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 画面の外枠（中央寄せ＋余白）
 function Screen({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-xl px-4 py-4">{children}</div>;
+  return (
+    <div className="mx-auto max-w-xl px-4 py-4">
+      <SoundToggle />
+      {children}
+    </div>
+  );
 }
 
 // 出題プールの選択肢（ラベルと件数つき）
 const TOPIC_PICKS: { key: TopicPick; label: string; desc: string; count: number }[] = [
   { key: "official", label: "公式のみ", desc: "定番カード", count: OFFICIAL_TOPICS.length },
-  { key: "extra", label: "追加のみ", desc: "価値観が透ける自作", count: EXTRA_TOPICS.length },
+  { key: "extra", label: "追加のみ", desc: "追加コンテンツ", count: EXTRA_TOPICS.length },
   { key: "mix", label: "混ぜてランダム", desc: "公式＋追加", count: OFFICIAL_TOPICS.length + EXTRA_TOPICS.length },
 ];
 
@@ -225,6 +304,7 @@ function SetupScreen({
   }
 
   function handleStart() {
+    unlockAudio(); // 最初のタップで音の制約を解除（以後ファンファーレ/実況が鳴る）
     const cleaned = roster.map((p) => ({ ...p, name: p.name.trim() || "名無し" }));
     saveProfiles(cleaned);
     const players: Player[] = playingIds.map((id) => {
@@ -247,42 +327,42 @@ function SetupScreen({
   return (
     <Screen>
       <div className="mb-6 text-center">
-        <div className="text-5xl">🏇</div>
-        <h1 className="my-1 text-2xl font-bold">価値観ダービー</h1>
-        <p className="text-sm text-slate-500">相手の回答を予想して、1〜3着をぴったり当てろ</p>
+        <div className="text-6xl">🏇</div>
+        <h1 className="pixel-title my-2 text-3xl font-bold tracking-wide">価値観ダービー</h1>
+        <p className="inline-block bg-[#0e1a0e] px-2 py-1 text-xs text-[#ffd93b]">相手の回答を予想して、1〜3着をぴったり当てろ</p>
       </div>
 
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="mb-4 pixel-card p-5">
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-sm text-slate-500">参加メンバー（{count}人 / 2〜6人）</label>
+          <label className="text-sm font-bold text-[#123d17]">参加メンバー（{count}人 / 2〜6人）</label>
           {count >= 2 && (
             <button
               onClick={shuffleOrder}
-              className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+              className="pixel-btn-sm bg-[#fffdf3] px-3 py-1 text-sm"
             >
               🔀 順番ランダム
             </button>
           )}
         </div>
-        <p className="mb-3 text-xs text-slate-400">番号＝出題順（先頭が最初の出題者）。⭐常連は次回も自動で参加。</p>
+        <p className="mb-3 text-xs text-[#4a6b4f]">番号＝出題順（先頭が最初の出題者）。⭐常連は次回も自動で参加。</p>
 
         {/* 参加中の人だけコンパクトに表示 */}
         {playing.map((p, i) => (
           <div key={p.id} className="mb-2 flex items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-sm font-medium text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-[#123d17] bg-[#47b14e] text-sm font-bold text-white">
               {i + 1}
             </span>
             <input
               value={p.name}
               onChange={(e) => editName(p.id, e.target.value)}
               placeholder="名前"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="pixel-input w-full px-3 py-2"
             />
             <button
               onClick={() => toggleDefault(p.id)}
               className={[
-                "rounded-lg border px-3 py-2",
-                p.isDefault ? "border-amber-400 bg-amber-50" : "border-slate-300 text-slate-300",
+                "pixel-btn-sm px-3 py-2",
+                p.isDefault ? "bg-[#ffe89a]" : "bg-[#fffdf3] text-[#9bb59f]",
               ].join(" ")}
               aria-label="常連（毎回自動参加）に設定"
               title="⭐常連にすると毎回自動で参加します"
@@ -292,7 +372,7 @@ function SetupScreen({
             <button
               onClick={() => removeFromGame(p.id)}
               disabled={count <= 2}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-slate-500 disabled:opacity-30"
+              className="pixel-btn-sm bg-[#fffdf3] px-3 py-2 text-[#123d17] disabled:opacity-30"
               aria-label="この回から外す"
               title="この回から外す（名簿には残る）"
             >
@@ -304,14 +384,14 @@ function SetupScreen({
         {/* 名簿（普段は閉じている。開いて呼び出す/追加する） */}
         <button
           onClick={() => setRosterOpen((v) => !v)}
-          className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+          className="pixel-btn-sm mt-2 flex w-full items-center justify-between bg-[#eef3ea] px-3 py-2 text-sm text-[#123d17]"
         >
           <span>👥 名簿から呼び出す / 追加{bench.length > 0 ? `（待機 ${bench.length}人）` : ""}</span>
-          <span className="text-slate-400">{rosterOpen ? "▲" : "▼"}</span>
+          <span>{rosterOpen ? "▲" : "▼"}</span>
         </button>
 
         {rosterOpen && (
-          <div className="mt-2 rounded-lg border border-slate-200 p-3">
+          <div className="mt-2 border-[3px] border-[#123d17] p-3">
             {bench.length > 0 ? (
               <div className="mb-2 flex flex-col gap-2">
                 {bench.map((p) => (
@@ -319,13 +399,13 @@ function SetupScreen({
                     <button
                       onClick={() => addToGame(p.id)}
                       disabled={count >= 6}
-                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-40"
+                      className="pixel-btn-sm flex-1 bg-[#fffdf3] px-3 py-2 text-left text-sm disabled:opacity-40"
                     >
                       ＋ {p.name || "名無し"} {p.isDefault ? "⭐" : ""}
                     </button>
                     <button
                       onClick={() => deleteProfile(p.id)}
-                      className="rounded-lg border border-slate-300 px-3 py-2 text-slate-400 hover:text-red-500"
+                      className="pixel-btn-sm bg-[#fffdf3] px-3 py-2 text-[#123d17]"
                       aria-label="名簿から削除"
                       title="名簿から削除"
                     >
@@ -335,12 +415,12 @@ function SetupScreen({
                 ))}
               </div>
             ) : (
-              <p className="mb-2 text-xs text-slate-400">待機中の人はいません。下のボタンで新しい人を追加できます。</p>
+              <p className="mb-2 text-xs text-[#4a6b4f]">待機中の人はいません。下のボタンで新しい人を追加できます。</p>
             )}
             <button
               onClick={addNew}
               disabled={count >= 6}
-              className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              className="pixel-btn-sm w-full bg-[#fffdf3] px-3 py-2 text-sm text-[#123d17] disabled:opacity-40"
             >
               ＋ 新しい人を追加
             </button>
@@ -348,35 +428,33 @@ function SetupScreen({
         )}
       </div>
 
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
-        <label className="mb-2 block text-sm text-slate-500">お題の種類</label>
+      <div className="mb-4 pixel-card p-5">
+        <label className="mb-2 block text-sm font-bold text-[#123d17]">お題の種類</label>
         <div className="grid grid-cols-3 gap-2">
           {TOPIC_PICKS.map((tp) => (
             <button
               key={tp.key}
               onClick={() => setTopicPick(tp.key)}
               className={[
-                "rounded-xl border px-2 py-3 text-center transition",
-                topicPick === tp.key
-                  ? "border-2 border-indigo-500 bg-indigo-50"
-                  : "border-slate-300 bg-white hover:bg-slate-50",
+                "pixel-tab px-2 py-3 text-center",
+                topicPick === tp.key ? "is-active" : "",
               ].join(" ")}
             >
-              <div className="text-sm font-medium text-slate-800">{tp.label}</div>
-              <div className="mt-0.5 text-[11px] leading-tight text-slate-400">{tp.desc}</div>
-              <div className="mt-1 text-[11px] text-slate-500">{tp.count}問</div>
+              <div className="text-sm font-bold text-[#123d17]">{tp.label}</div>
+              <div className="mt-0.5 text-[11px] leading-tight text-[#4a6b4f]">{tp.desc}</div>
+              <div className="mt-1 text-[11px] font-bold text-[#123d17]">{tp.count}問</div>
             </button>
           ))}
         </div>
 
         {/* 未回答の状況（人ごと）＋再挑戦トグル＋履歴リセット */}
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+        <div className="mt-3 border-t-2 border-dashed border-[#123d17]/30 pt-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-[#123d17]">
             <span>各メンバーの未回答（全{pool.length}問中）</span>
             {hasAnswered && (
               <button
                 onClick={resetAnswered}
-                className="rounded-lg border border-slate-300 px-2 py-1 hover:bg-slate-50"
+                className="pixel-btn-sm bg-[#fffdf3] px-2 py-1"
               >
                 履歴をリセット
               </button>
@@ -387,29 +465,29 @@ function SetupScreen({
               <span
                 key={f.name}
                 className={[
-                  "rounded-lg px-2 py-1 text-xs",
-                  f.fresh === 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700",
+                  "pixel-chip px-2 py-1 text-xs",
+                  f.fresh === 0 ? "bg-[#ffd6a3] text-[#7a3d00]" : "bg-[#eef3ea] text-[#123d17]",
                 ].join(" ")}
               >
-                {f.name} <span className="font-medium">{f.fresh}</span>
+                {f.name} <span className="font-bold">{f.fresh}</span>
               </span>
             ))}
           </div>
-          <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={replay} onChange={(e) => setReplay(e.target.checked)} className="h-4 w-4" />
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-[#123d17]">
+            <input type="checkbox" checked={replay} onChange={(e) => setReplay(e.target.checked)} className="h-4 w-4 accent-[#d99a00]" />
             回答済みのお題を含める
           </label>
           {shortOfFresh && (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+            <p className="pixel-chip mt-2 bg-[#fff3d6] px-3 py-2 text-[11px] leading-relaxed text-[#7a3d00]">
               未回答が少ない人がいるため、その人には回答済みも一部出ます。「回答済みのお題を含める」か「履歴をリセット」もどうぞ。
             </p>
           )}
         </div>
       </div>
 
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
-        <label className="mb-2 block text-sm text-slate-500">
-          周回数（1人が出題する回数）: <span className="font-medium text-slate-800">{lapsClamped}周</span>
+      <div className="mb-4 pixel-card p-5">
+        <label className="mb-2 block text-sm font-bold text-[#123d17]">
+          周回数（1人が出題する回数）: <span className="text-[#8a5a00]">{lapsClamped}周</span>
         </label>
         <input
           type="range"
@@ -418,12 +496,14 @@ function SetupScreen({
           step={1}
           value={lapsClamped}
           onChange={(e) => setLaps(Number(e.target.value))}
-          className="w-full"
+          className="pixel-range"
         />
-        <div className="mt-1 text-xs text-slate-400">
+        <div className="mt-1 text-xs text-[#4a6b4f]">
           全{totalRounds}レース（公式: 2〜4人=2周 / 5〜6人=1周）
         </div>
       </div>
+
+      <FanfarePicker />
 
       <PrimaryButton onClick={handleStart} disabled={!canStart}>
         ダービー開始 🏁
@@ -438,6 +518,21 @@ type GameConfig = { players: Player[]; laps: number; pick: TopicPick; replay: bo
 export default function App() {
   const [state, dispatch] = useReducer(gameReducer, undefined, initialState);
   const [lastConfig, setLastConfig] = useState<GameConfig | null>(null); // 直前の設定（再戦用）
+
+  // レース開始(intro)の合図：オリジナル・ファンファーレ → 少し置いておじさん実況。
+  // レースが変わるたび（phase=intro に入るたび）に1回鳴らす。
+  useEffect(() => {
+    if (state.phase !== "intro") return;
+    const grand = state.roundIndex === 0; // 1レース目だけフル版、以降は短縮版
+    playFanfare(grand);
+    const askerName = getAsker(state).name;
+    const raceNo = state.roundIndex + 1;
+    const id = setTimeout(
+      () => announce(`さぁ、第${raceNo}レース！　出題者は${askerName}さんだ！`, { clear: true }),
+      fanfareMs(grand), // 選択中パターンの長さぶん待ってから喋る（被り防止）
+    );
+    return () => clearTimeout(id);
+  }, [state.phase, state.roundIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // セットアップ完了 → 出題者スロットごとに「その人が未回答のお題」を割り当てて START_GAME。
   // ラウンド r の出題者 = players[r % 人数]（gameReducter の getAsker と一致）。
@@ -481,14 +576,14 @@ export default function App() {
     return (
       <Screen>
         <TurnBar state={state} />
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+        <div className="pixel-card p-8 text-center">
           <div className="mb-2 text-4xl">🎤</div>
-          <p className="mb-1 text-sm text-slate-500">このレースの出題者は</p>
-          <h1 className="mb-6 text-2xl font-bold">{asker.name} さん</h1>
-          <p className="mb-6 text-sm leading-relaxed text-slate-500">
+          <p className="mb-1 text-sm text-[#4a6b4f]">このレースの出題者は</p>
+          <h1 className="pixel-title mb-6 text-2xl font-bold">{asker.name} さん</h1>
+          <p className="mb-6 text-sm leading-relaxed text-[#4a6b4f]">
             お題はみんなで読んでOK。
             <br />
-            ただし <span className="font-medium text-slate-700">{asker.name}さんの着順（答え）だけ</span> は他の人に見せないでね。
+            ただし <span className="font-bold text-[#123d17]">{asker.name}さんの着順（答え）だけ</span> は他の人に見せないでね。
           </p>
           <PrimaryButton onClick={() => dispatch({ type: "VIEW_TOPIC" })}>回答を決める →</PrimaryButton>
         </div>
@@ -502,12 +597,12 @@ export default function App() {
       <Screen>
         <TurnBar state={state} />
         <div className="mb-3 text-center">
-          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs text-emerald-800">
+          <span className="pixel-chip inline-block bg-[#ffe89a] px-3 py-1 text-xs font-bold text-[#123d17]">
             {asker.name}さんの回答 🤫（渡すまで何度でも選び直せます）
           </span>
         </div>
-        <h2 className="mb-1 text-center text-lg font-semibold">{topic.q}</h2>
-        <p className="mb-4 text-center text-xs text-slate-400">好きな順に3つ選んでください（{state.answer.length}/3）</p>
+        <h2 className="mb-1 text-center text-lg font-bold text-[#123d17]">{topic.q}</h2>
+        <p className="mb-4 text-center text-xs text-[#eafff0]">好きな順に3つ選んでください（{state.answer.length}/3）</p>
         {topic.opts.map((opt) => (
           <OptionButton
             key={opt}
@@ -533,10 +628,10 @@ export default function App() {
     return (
       <Screen>
         <TurnBar state={state} />
-        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
+        <div className="pixel-card p-10 text-center">
           <div className="mb-4 text-5xl">🙈</div>
-          <h1 className="mb-2 text-xl font-bold">画面を {receiver} さんへ</h1>
-          <p className="mb-6 text-sm leading-relaxed text-slate-500">
+          <h1 className="pixel-title mb-2 text-xl font-bold">画面を {receiver} さんへ</h1>
+          <p className="mb-6 text-sm leading-relaxed text-[#4a6b4f]">
             出題者の着順は伏せました。
             <br />
             {receiver}さんは、下のボタンを押して予想を始めてください。
@@ -556,10 +651,10 @@ export default function App() {
       <Screen>
         <TurnBar state={state} />
         <div className="mb-3 text-center">
-          <span className="rounded-lg bg-indigo-100 px-3 py-1 text-xs text-indigo-800">{guesser}さんの予想 🔮</span>
+          <span className="pixel-chip inline-block bg-[#cfe0ff] px-3 py-1 text-xs font-bold text-[#123d17]">{guesser}さんの予想 🔮</span>
         </div>
-        <h2 className="mb-1 text-center text-lg font-semibold">{topic.q}</h2>
-        <p className="mb-4 text-center text-xs text-slate-400">
+        <h2 className="mb-1 text-center text-lg font-bold text-[#123d17]">{topic.q}</h2>
+        <p className="mb-4 text-center text-xs text-[#eafff0]">
           {asker.name}さんが選んだ順を予想（{state.guess.length}/3）
         </p>
         {topic.opts.map((opt) => (
@@ -630,28 +725,34 @@ function RevealScreen({ state, onNext }: { state: GameState; onNext: () => void 
   const allOpen = opened >= 3;
   const nextRankLabel = ranks[3 - opened - 1]; // 次に開くのは何着か（3着→2着→1着）
 
+  // 1着をめくり切った瞬間、おじさんが本音の1着をコール。
+  useEffect(() => {
+    if (allOpen) announce(`${asker.name}さんの1着は…、${answer[0]}！`, { clear: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allOpen]);
+
   return (
     <Screen>
-      <h2 className="mb-1 text-center text-lg font-bold">結果発表 🏁</h2>
-      <p className="mb-4 text-center text-sm text-slate-500">お題: {topic.q}</p>
+      <h2 className="pixel-title mb-2 text-center text-2xl font-bold">結果発表 🏁</h2>
+      <p className="mb-4 inline-block w-full bg-[#0e1a0e] px-2 py-1 text-center text-sm text-[#ffd93b]">お題: {topic.q}</p>
 
-      {/* 出題者の本音（めくり） */}
-      <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-        <div className="mb-2 text-xs text-emerald-700">{asker.name}さんの回答</div>
+      {/* 出題者の本音（めくり）＝スターティングゲートを開く演出 */}
+      <div className="pixel-card mb-4 p-4">
+        <div className="mb-2 text-xs font-bold text-[#123d17]">🐴 {asker.name}さんの回答（ゲートイン）</div>
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div
               key={i}
               className={[
-                "flex items-start gap-3 rounded-xl px-4 py-3 transition",
-                isOpen(i) ? "bg-white" : "bg-emerald-100/60",
+                "pixel-chip flex items-start gap-3 px-4 py-3 transition",
+                isOpen(i) ? "gate-open" : "gate-closed",
               ].join(" ")}
             >
-              <span className="w-10 shrink-0 pt-0.5 text-sm font-medium text-emerald-700">{ranks[i]}</span>
+              <span className="w-10 shrink-0 pt-0.5 text-sm font-bold">{ranks[i]}</span>
               {isOpen(i) ? (
-                <span className="flex-1 break-words text-base font-medium leading-snug text-emerald-900">{answer[i]}</span>
+                <span className="flex-1 break-words text-base font-bold leading-snug">{answer[i]}</span>
               ) : (
-                <span className="text-base font-medium tracking-widest text-emerald-400">？？？</span>
+                <span className="text-base font-bold tracking-widest">？？？</span>
               )}
             </div>
           ))}
@@ -660,9 +761,9 @@ function RevealScreen({ state, onNext }: { state: GameState; onNext: () => void 
         {!allOpen && (
           <button
             onClick={() => setOpened((v) => v + 1)}
-            className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 text-base font-medium text-white hover:bg-emerald-700"
+            className="pixel-btn pixel-btn-gold mt-3 w-full px-4 py-3 text-base font-bold"
           >
-            {nextRankLabel}をめくる 👀
+            {nextRankLabel}のゲートを開く 🏇
           </button>
         )}
       </div>
@@ -670,15 +771,15 @@ function RevealScreen({ state, onNext }: { state: GameState; onNext: () => void 
       {/* 各予想者の結果（開いた着順ぶんだけ ◎○✕ を点灯。役名は全部開いてから） */}
       <div className="space-y-3">
         {entries.map((e) => (
-          <div key={e.guesserId} className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div key={e.guesserId} className="pixel-card p-4">
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-medium">{nameOf(state, e.guesserId)} さんの予想</span>
+              <span className="font-bold text-[#123d17]">{nameOf(state, e.guesserId)} さんの予想</span>
               {allOpen ? (
-                <span className="rounded-lg bg-indigo-100 px-2 py-1 text-sm font-medium text-indigo-800">
+                <span className="pixel-chip bg-[#ffe89a] px-2 py-1 text-sm font-bold text-[#123d17]">
                   {e.payout.label} +{e.payout.pt}点
                 </span>
               ) : (
-                <span className="text-xs text-slate-400">役は1着めくりで判明</span>
+                <span className="text-xs text-[#4a6b4f]">役は1着めくりで判明</span>
               )}
             </div>
             <table className="w-full text-sm">
@@ -688,19 +789,19 @@ function RevealScreen({ state, onNext }: { state: GameState; onNext: () => void 
                   const hit = answer[i] === e.guess[i];
                   const setHit = answer.includes(e.guess[i]);
                   return (
-                    <tr key={i} className="border-t border-slate-100 align-top">
-                      <td className="whitespace-nowrap py-1.5 pr-2 font-medium text-slate-500">{ranks[i]}</td>
-                      <td className="break-words py-1.5 pr-2 text-slate-700">{shown ? answer[i] : "？"}</td>
+                    <tr key={i} className="border-t-2 border-dashed border-[#123d17]/20 align-top">
+                      <td className="whitespace-nowrap py-1.5 pr-2 font-bold text-[#4a6b4f]">{ranks[i]}</td>
+                      <td className="break-words py-1.5 pr-2 text-[#123d17]">{shown ? answer[i] : "？"}</td>
                       <td
                         className={[
-                          "break-words py-1.5",
+                          "break-words py-1.5 font-bold",
                           !shown
-                            ? "text-slate-400"
+                            ? "text-[#9bb59f]"
                             : hit
-                              ? "font-medium text-emerald-600"
+                              ? "text-[#1f8a3b]"
                               : setHit
-                                ? "text-amber-600"
-                                : "text-slate-400",
+                                ? "text-[#c07a00]"
+                                : "text-[#9bb59f]",
                         ].join(" ")}
                       >
                         {e.guess[i]} {shown ? (hit ? "◎" : setHit ? "○" : "✕") : ""}
@@ -713,13 +814,13 @@ function RevealScreen({ state, onNext }: { state: GameState; onNext: () => void 
           </div>
         ))}
       </div>
-      <p className="mt-2 text-center text-xs text-slate-400">◎ 順位ぴったり / ○ 選択肢は的中 / ✕ ハズレ</p>
+      <p className="mt-2 inline-block w-full bg-[#0e1a0e] px-2 py-1 text-center text-xs text-[#ffd93b]">◎ 順位ぴったり / ○ 選択肢は的中 / ✕ ハズレ</p>
 
       {/* 会話導線（本丸）: 全部めくれてから出題者に「なぜ1着はコレ？」を促す */}
       {allOpen && (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center">
+        <div className="pixel-card mt-4 bg-[#fff3d6] p-4 text-center">
           <div className="mb-2 text-2xl">💬</div>
-          <p className="text-base leading-relaxed text-amber-900">
+          <p className="text-base font-bold leading-relaxed text-[#7a3d00]">
             予想は当たりましたか？
             <br />
             なぜその順位ですか？？
@@ -746,9 +847,9 @@ function ScoreRow({ state }: { state: GameState }) {
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       {state.players.map((p) => (
-        <div key={p.id} className="flex-1 rounded-lg bg-slate-100 p-3 text-center">
-          <div className="text-xs text-slate-500">{p.name}</div>
-          <div className="text-2xl font-medium">{state.scores[p.id] ?? 0}</div>
+        <div key={p.id} className="led-board flex-1 p-3 text-center">
+          <div className="text-xs">{p.name}</div>
+          <div className="led-hi text-2xl font-bold">{state.scores[p.id] ?? 0}</div>
         </div>
       ))}
     </div>
@@ -758,11 +859,11 @@ function ScoreRow({ state }: { state: GameState }) {
 // 発見カード1枚（絵文字＋見出し＋本文）
 function DiscoveryItem({ emoji, title, body }: { emoji: string; title: string; body: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-white px-4 py-3">
+    <div className="pixel-chip flex items-start gap-3 bg-[#fffdf3] px-4 py-3">
       <span className="text-2xl leading-none">{emoji}</span>
       <div>
-        <div className="text-xs font-medium text-amber-700">{title}</div>
-        <div className="mt-0.5 text-sm leading-snug text-slate-800">{body}</div>
+        <div className="text-xs font-bold text-[#c07a00]">{title}</div>
+        <div className="mt-0.5 text-sm leading-snug text-[#123d17]">{body}</div>
       </div>
     </div>
   );
@@ -788,6 +889,20 @@ function FinalScreen({
   const winners = ranked.filter((p) => (state.scores[p.id] ?? 0) === topScore);
   const isTie = winners.length > 1;
 
+  // 終了時、おじさんが着順をコール（上位から読み上げ）。画面表示と同時に1回だけ。
+  useEffect(() => {
+    const order = ["優勝", "2位", "3位", "4位", "5位", "6位"];
+    const head = isTie
+      ? `本日のダービー、結果発表！　なんと、${winners.map((p) => p.name).join("、")}さんが同点で引き分けだ！`
+      : `本日のダービー、結果発表！　優勝は${top.name}さん、おめでとう！`;
+    const rest = ranked
+      .slice(0, 3)
+      .map((p, i) => `${order[i]}、${p.name}さん、${state.scores[p.id] ?? 0}点`)
+      .join("。　");
+    announce(`${head}　${rest}。`, { clear: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // このゲームのレース結果は state.results に確定値が入っている（保存履歴に依存しない）。
   // それを使って「レース振り返り」を計算する。
   const highlights = useMemo(() => computeHighlights(state.results), [state.results]);
@@ -798,10 +913,10 @@ function FinalScreen({
 
   return (
     <Screen>
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-8 text-center">
+      <div className="mb-4 pixel-card p-8 text-center">
         <div className="mb-2 text-6xl">🏆</div>
-        <p className="mb-1 text-sm text-slate-500">{isTie ? "結果は…" : "優勝は"}</p>
-        <h1 className="mb-6 text-2xl font-bold">
+        <p className="mb-1 text-sm text-[#4a6b4f]">{isTie ? "結果は…" : "優勝は"}</p>
+        <h1 className="pixel-title mb-6 text-3xl font-bold">
           {isTie ? "引き分け！" : `${top.name} さん！`}
         </h1>
         <div className="space-y-2">
@@ -811,14 +926,14 @@ function FinalScreen({
               <div
                 key={p.id}
                 className={[
-                  "flex items-center justify-between rounded-lg px-4 py-3",
-                  isWinner ? "bg-indigo-100" : "bg-slate-100",
+                  "pixel-chip flex items-center justify-between px-4 py-3",
+                  isWinner ? "bg-[#ffe89a]" : "bg-[#eef3ea]",
                 ].join(" ")}
               >
-                <span className="font-medium">
+                <span className="font-bold text-[#123d17]">
                   {i + 1}位　{p.name}
                 </span>
-                <span className={["text-xl font-bold", isWinner ? "text-indigo-700" : "text-slate-700"].join(" ")}>
+                <span className={["text-xl font-bold", isWinner ? "text-[#8a5a00]" : "text-[#4a6b4f]"].join(" ")}>
                   {state.scores[p.id] ?? 0}点
                 </span>
               </div>
@@ -829,8 +944,8 @@ function FinalScreen({
 
       {/* レース振り返り（勝敗より“へぇ”を主役に。該当が無い枠は出さない） */}
       {hasAnyHighlight && (
-        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <h2 className="mb-3 text-center text-lg font-bold text-amber-900">レース振り返り 🏁</h2>
+        <div className="pixel-card mb-4 bg-[#fff3d6] p-5">
+          <h2 className="mb-3 text-center text-lg font-bold text-[#7a3d00]">レース振り返り 🏁</h2>
           <div className="space-y-3">
             {highlights.pita && (
               <DiscoveryItem
@@ -868,7 +983,7 @@ function FinalScreen({
         {onReplay && <PrimaryButton onClick={onReplay}>もう一度する 🔄（同じメンバー）</PrimaryButton>}
         <button
           onClick={onBackToTitle}
-          className="w-full rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50"
+          className="pixel-btn w-full bg-[#fffdf3] px-6 py-3 text-base font-bold text-[#123d17]"
         >
           タイトルに戻る 🏠
         </button>

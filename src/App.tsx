@@ -24,7 +24,9 @@ import {
 import {
   unlockAudio,
   playFanfare,
+  stopFanfare,
   announce,
+  stopSpeak,
   isSoundOn,
   setSoundOn,
   fanfareMs,
@@ -519,22 +521,27 @@ export default function App() {
   const [state, dispatch] = useReducer(gameReducer, undefined, initialState);
   const [lastConfig, setLastConfig] = useState<GameConfig | null>(null); // 直前の設定（再戦用）
 
-  // レース開始(intro)の合図：オリジナル・ファンファーレ → 少し置いておじさん実況。
-  // レースが変わるたび（phase=intro に入るたび）に1回鳴らす。
+  // ① 発走(gate)画面：レースが始まる感＋音楽（選択中ファンファーレ）を流す。
+  //    音楽が一段落したら自動で出題者紹介へ（「次へ」を押せば即進める）。
+  //    どちらで抜けても後片付けで stopFanfare する。
   useEffect(() => {
-    if (state.phase !== "intro") return;
+    if (state.phase !== "gate") return;
     const grand = state.roundIndex === 0; // 1レース目だけフル版、以降は短縮版
     playFanfare(grand);
+    const id = setTimeout(() => dispatch({ type: "SHOW_ASKER" }), fanfareMs(grand));
+    return () => {
+      clearTimeout(id); // 手動で進んだら自動タイマーは止める
+      stopFanfare(); // 発走を抜けたら音楽を止める
+    };
+  }, [state.phase, state.roundIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ② 出題者紹介(intro)画面に入ったら、おじさんが実況（自動遷移でも手動でも鳴る）。
+  //    お題へは「お題へ」ボタン必須。押した時に実況をキャンセルする（画面側で stopSpeak）。
+  useEffect(() => {
+    if (state.phase !== "intro") return;
     const askerName = getAsker(state).name;
     const raceNo = state.roundIndex + 1;
-    // ファンファーレが鳴り終わってから実況（被り防止）。
-    // ★重要：ここで clearTimeout してしまうと、待機中(最大12秒)に
-    //   「回答を決める」で先へ進んだ瞬間に実況がキャンセルされて“消える”。
-    //   画面を進めても実況は流したいので、あえて後片付けでは止めない。
-    setTimeout(
-      () => announce(`さぁ、第${raceNo}レース！　出題者は${askerName}さんだ！`, { clear: true }),
-      fanfareMs(grand), // 選択中パターンの長さぶん待ってから喋る（被り防止）
-    );
+    announce(`さぁ、第${raceNo}レース！　出題者は${askerName}さんだ！`, { clear: true });
   }, [state.phase, state.roundIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // セットアップ完了 → 出題者スロットごとに「その人が未回答のお題」を割り当てて START_GAME。
@@ -574,7 +581,38 @@ export default function App() {
   const asker = getAsker(state);
   const topic = getCurrentTopic(state);
 
-  // ===== intro（出題者の発表）=====
+  // ===== gate（発走：レースが始まる感の演出＋音楽。自動で紹介へ）=====
+  if (state.phase === "gate") {
+    const lap = getLap(state);
+    return (
+      <Screen>
+        <TurnBar state={state} />
+        <div className="pixel-card p-6 text-center">
+          <div className="led-board mb-3 py-2 text-base font-bold">
+            第{lap}周 / 第{state.roundIndex + 1}レース <span className="led-hi">GATE IN</span>
+          </div>
+          <div className="go-flash pixel-title my-2 text-4xl font-bold tracking-widest">🏇 発走！ 🏇</div>
+
+          {/* 芝コースを駆け抜ける馬（ドットアニメ）。馬は左向き＝ゴール板は左。ずっと走る。 */}
+          <div className="my-4 flex items-stretch gap-1">
+            <div className="finish-flag w-4 border-[3px] border-[#123d17]" aria-hidden />
+            <div className="gallop-track flex-1">
+              <div className="gallop-x">
+                <span className="gallop-y">🏇</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="mb-4 text-sm leading-relaxed text-[#4a6b4f]">
+            まもなくレースが始まります…
+          </p>
+          <PrimaryButton onClick={() => dispatch({ type: "SHOW_ASKER" })}>次へ →</PrimaryButton>
+        </div>
+      </Screen>
+    );
+  }
+
+  // ===== intro（出題者紹介：おじさんの実況が流れる。お題へはクリック必須）=====
   if (state.phase === "intro") {
     return (
       <Screen>
@@ -588,7 +626,15 @@ export default function App() {
             <br />
             ただし <span className="font-bold text-[#123d17]">{asker.name}さんの着順（答え）だけ</span> は他の人に見せないでね。
           </p>
-          <PrimaryButton onClick={() => dispatch({ type: "VIEW_TOPIC" })}>回答を決める →</PrimaryButton>
+          {/* お題へ進む時に実況を止める（被り防止） */}
+          <PrimaryButton
+            onClick={() => {
+              stopSpeak();
+              dispatch({ type: "VIEW_TOPIC" });
+            }}
+          >
+            お題へ →
+          </PrimaryButton>
         </div>
       </Screen>
     );

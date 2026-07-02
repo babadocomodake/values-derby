@@ -35,6 +35,7 @@ export function getCurrentTopic(state: GameState): Topic {
 // ===== アクション定義 =====
 export type Action =
   | { type: "START_GAME"; players: Player[]; deck: Topic[]; maxLaps: number }
+  | { type: "SHOW_ASKER" } // gate（発走）→ intro（出題者紹介）
   | { type: "VIEW_TOPIC" } // intro → answer
   | { type: "TOGGLE_ANSWER"; choice: Choice }
   | { type: "LOCK_ANSWER" } // answer → handoff（答えを確定し端末を渡す）
@@ -97,7 +98,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       for (const p of players) scores[p.id] = 0;
       return {
         ...initialState(),
-        phase: "intro",
+        phase: "gate",
         players,
         deck,
         maxLaps,
@@ -105,6 +106,11 @@ export function gameReducer(state: GameState, action: Action): GameState {
         roundIndex: 0,
         scores,
       };
+    }
+
+    case "SHOW_ASKER": {
+      // 発走（音楽）→ 出題者紹介（音声）
+      return { ...state, phase: "intro" };
     }
 
     case "VIEW_TOPIC": {
@@ -218,7 +224,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (next >= state.totalRounds) {
         return { ...resetRoundWork(state), phase: "final" };
       }
-      return { ...resetRoundWork(state), roundIndex: next, phase: "intro" };
+      return { ...resetRoundWork(state), roundIndex: next, phase: "gate" };
     }
 
     case "RESET":

@@ -45,7 +45,8 @@ export interface Profile {
 /** 画面の状態（進行状態とは分離する） */
 export type Phase =
   | "setup" // 準備
-  | "intro" // 出題者の発表
+  | "gate" // 発走（レース開始演出・音楽）
+  | "intro" // 出題者紹介（音声。クリックでお題へ）
   | "answer" // 出題者が本音で着順を決める
   | "handoff" // 端末を次の予想者へ渡す（目隠し）
   | "guess" // 予想者が着順を予想

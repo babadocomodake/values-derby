@@ -132,10 +132,13 @@ const NF: Record<string, number> = {
 type Mel = [number, number, string];
 
 // ---- 出力バス（master→リミッタ→出力／必要なら残響send） ----
+// いま鳴っているファンファーレの master ゲイン。stopFanfare() で素早く絞って止める。
+let activeMaster: GainNode | null = null;
 type Bus = { master: GainNode; out: (node: AudioNode) => void };
 function makeBus(c: AudioContext, reverbAmount: number): Bus {
   const master = c.createGain();
   master.gain.value = 0.8;
+  activeMaster = master; // 直近の再生を“現在の曲”として覚えておく（途中で止められるように）
   const limiter = c.createDynamicsCompressor();
   limiter.threshold.value = -7;
   limiter.knee.value = 0;
@@ -567,6 +570,21 @@ export function playFanfare(grand = true, id: FanfareId = getFanfareId()): void 
   defOf(id).play(c, c.currentTime + 0.06, grand);
 }
 
+// いま鳴っているファンファーレを素早くフェードして止める（発走→お題へ進む時など）。
+// プツッと切れないよう約80msで絞る。音声合成(実況)は別系統なので影響しない。
+export function stopFanfare(): void {
+  if (!ctx || !activeMaster) return;
+  try {
+    const now = ctx.currentTime;
+    const g = activeMaster.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(0.0001, now + 0.08);
+  } catch {
+    /* 無視 */
+  }
+}
+
 // 試聴（選択に関係なく指定パターンのフル版を鳴らす）。ON/OFFに関係なく鳴らす。
 export function previewFanfare(id: FanfareId): void {
   const c = getCtx();
@@ -586,13 +604,16 @@ function pickVoice(): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
   const ja = voices.filter((v) => v.lang?.toLowerCase().startsWith("ja"));
   if (ja.length === 0) return null;
+  // オフライン(localService)の音声を優先。ネットワーク音声はChromeで無音になりやすい。
+  const local = ja.filter((v) => v.localService);
+  const pool = local.length > 0 ? local : ja;
   // 男性名の既知ボイスを優先（iOS/mac: Otoya, Hattori / Android: 男性音声など）
   const preferred = ["otoya", "hattori", "o-ren", "ichiro", "male"];
   for (const key of preferred) {
-    const hit = ja.find((v) => v.name.toLowerCase().includes(key));
+    const hit = pool.find((v) => v.name.toLowerCase().includes(key));
     if (hit) return hit;
   }
-  return ja[0]; // 男性が無ければ日本語の先頭（Kyoko等）でも喋らせる
+  return pool[0]; // 男性が無ければ日本語の先頭（Kyoko等）でも喋らせる
 }
 
 function getVoice(): SpeechSynthesisVoice | null {
@@ -622,7 +643,6 @@ export function announce(text: string, opts: { clear?: boolean } = {}): void {
   if (!isSoundOn()) return;
   const synth = window.speechSynthesis;
   if (!synth) return;
-  if (opts.clear) synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "ja-JP";
   const v = getVoice();
@@ -630,5 +650,40 @@ export function announce(text: string, opts: { clear?: boolean } = {}): void {
   u.pitch = 0.85; // 低めでおじさん寄り
   u.rate = 1.02; // 実況らしく気持ち速め
   u.volume = 1;
-  synth.speak(u);
+
+  // ブラウザ対策：
+  //  ・一時停止(paused)状態だと speak しても鳴らないことがある → resume()
+  //  ・cancel() の直後に speak() すると発話が無視される既知の不具合(Chrome/Safari)
+  //    があるため、clear 時は少し間を空けてから話す。
+  //  ・Chromeは長め/連続の発話で途中停止するバグがある → 話す間 resume を打ち続ける。
+  const fire = () => {
+    try {
+      synth.resume();
+    } catch {
+      /* 無視 */
+    }
+    const pump = setInterval(() => {
+      try {
+        synth.resume();
+      } catch {
+        /* 無視 */
+      }
+    }, 250);
+    const stop = () => clearInterval(pump);
+    u.addEventListener("end", stop);
+    u.addEventListener("error", stop);
+    setTimeout(stop, 20000); // 保険（鳴り終わり検知に失敗してもいつか止める）
+    synth.speak(u);
+  };
+  try {
+    synth.resume();
+  } catch {
+    /* 無視 */
+  }
+  if (opts.clear) {
+    synth.cancel();
+    setTimeout(fire, 130);
+  } else {
+    fire();
+  }
 }

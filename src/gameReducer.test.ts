@@ -40,9 +40,9 @@ describe("defaultMaxLaps（公式の周回制）", () => {
 });
 
 describe("START_GAME", () => {
-  it("得点0・phase intro・出題者は先頭プレイヤー", () => {
+  it("得点0・phase gate（発走）・出題者は先頭プレイヤー", () => {
     const s = start(2, 4);
-    expect(s.phase).toBe("intro");
+    expect(s.phase).toBe("gate");
     expect(s.totalRounds).toBe(4);
     expect(s.scores).toEqual({ p1: 0, p2: 0 });
     expect(getAsker(s).id).toBe("p1");
@@ -71,7 +71,7 @@ describe("2人で1ラウンド（サンレンタン）", () => {
     expect(s.scores).toEqual({ p1: 0, p2: 6 }); // 出題者p1は得点しない
 
     s = gameReducer(s, { type: "NEXT_ROUND" });
-    expect(s.phase).toBe("intro");
+    expect(s.phase).toBe("gate");
     expect(s.roundIndex).toBe(1);
     expect(getAsker(s).id).toBe("p2"); // 出題者が交代
   });
@@ -150,7 +150,7 @@ describe("周回でゲーム終了", () => {
       { type: "NEXT_ROUND" }, // 2
       { type: "NEXT_ROUND" }, // 3
     ]);
-    expect(s.phase).toBe("intro");
+    expect(s.phase).toBe("gate");
     expect(s.roundIndex).toBe(3);
     s = gameReducer(s, { type: "NEXT_ROUND" }); // 4 → final
     expect(s.phase).toBe("final");

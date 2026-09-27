@@ -25,6 +25,7 @@ dist-ssr
 
 # AIアシスタント向け指示・ローカル専用（公開リポに含めない）
 CLAUDE.md
+AGENTS.md
 .claude/
 .playwright-mcp/
 

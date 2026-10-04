@@ -28,6 +28,7 @@ CLAUDE.md
 AGENTS.md
 .claude/
 .playwright-mcp/
+.wrangler/
 
 # 実物カードの写真（アプリ動作には不要・サイズ大・市販物。手元には残す）
 docs/cards-raw/
